@@ -94,18 +94,21 @@ struct BMP {
 };
 
 void ShowIntroInformation(HANDLE hConsole);
-void RunBitmapFilling(HANDLE hConsole);
-void RunBitmapFillingParralelOpenMP(HANDLE hConsole);
-void RunBitmapFillingParralelThread(HANDLE hConsole);
+void SetDelay(HANDLE hConsole, int& delay);
+void RunBitmapFilling(HANDLE hConsole, int delay);
+void RunBitmapFillingParralelOpenMP(HANDLE hConsole, int delay);
+void RunBitmapFillingParralelThread(HANDLE hConsole, int delay);
 
 int main()
 {
 	setlocale(LC_CTYPE, "Polish");
 	HANDLE hConsole = GetStdHandle(STD_OUTPUT_HANDLE);
+	int delay = 0;
 	ShowIntroInformation(hConsole);
-	RunBitmapFilling(hConsole);
-	RunBitmapFillingParralelOpenMP(hConsole);
-	RunBitmapFillingParralelThread(hConsole);
+	SetDelay(hConsole, delay);
+	RunBitmapFilling(hConsole, delay);
+	RunBitmapFillingParralelOpenMP(hConsole, delay);
+	RunBitmapFillingParralelThread(hConsole, delay);
 }
 
 void ShowIntroInformation(HANDLE hConsole)
@@ -124,11 +127,32 @@ void ShowIntroInformation(HANDLE hConsole)
 	SetConsoleTextAttribute(hConsole, 15);
 }
 
-void FillShape(BMP& bitmap, const Color& color) {
+void SetDelay(HANDLE hConsole, int& delay)
+{
+	SetConsoleTextAttribute(hConsole, 14);
+	cout << "\n -> Podaj opóŸnienie [ms]: ";
+	while (true) {
+		SetConsoleTextAttribute(hConsole, 15);
+		cin >> delay;
+		if (cin.good())
+		{
+			if (delay < 0) delay = 0;
+			break;
+		}
+		SetConsoleTextAttribute(hConsole, 4);
+		cout << "    ! Wartoœæ opóŸnienia musi byæ liczb¹\n";
+		SetConsoleTextAttribute(hConsole, 15);
+		cin.clear();
+		cin.ignore();
+	}
+}
+
+void FillShape(BMP& bitmap, const Color& color, int delay) {
 	int* mask = new int[bitmap.width * bitmap.height]();
 	stack<Point> points;
 	Color backgroundColor = bitmap.getColor(0, 0);
 
+	this_thread::sleep_for(std::chrono::milliseconds(delay));
 	points.push(Point(0, 0));
 	while (!points.empty()) {
 		auto p = points.top();
@@ -156,7 +180,7 @@ void FillShape(BMP& bitmap, const Color& color) {
 	delete[] mask;
 }
 
-void RunBitmapFilling(HANDLE hConsole)
+void RunBitmapFilling(HANDLE hConsole, int delay)
 {
 	cout << "\n\n";
 	SetConsoleTextAttribute(hConsole, 11);
@@ -169,7 +193,7 @@ void RunBitmapFilling(HANDLE hConsole)
 	{
 		BMP bitmapSquare("square.bmp");
 		auto begin = chrono::high_resolution_clock::now();
-		FillShape(bitmapSquare, Color(255, 0, 0));
+		FillShape(bitmapSquare, Color(255, 0, 0), delay);
 		bitmapSquare.write("output_square_sequentially.bmp");
 		auto end = chrono::high_resolution_clock::now();
 		auto elapsed = chrono::duration_cast<chrono::milliseconds>(end - begin).count();
@@ -188,7 +212,7 @@ void RunBitmapFilling(HANDLE hConsole)
 	{
 		BMP bitmapTriangle("triangle.bmp");
 		auto begin = chrono::high_resolution_clock::now();
-		FillShape(bitmapTriangle, Color(0, 255, 0));
+		FillShape(bitmapTriangle, Color(0, 255, 0), delay);
 		bitmapTriangle.write("output_triangle_sequentially.bmp");
 		auto end = chrono::high_resolution_clock::now();
 		auto elapsed = chrono::duration_cast<chrono::milliseconds>(end - begin).count();
@@ -207,7 +231,7 @@ void RunBitmapFilling(HANDLE hConsole)
 	{
 		BMP bitmapCircle("circle.bmp");
 		auto begin = chrono::high_resolution_clock::now();
-		FillShape(bitmapCircle, Color(0, 0, 255));
+		FillShape(bitmapCircle, Color(0, 0, 255), delay);
 		bitmapCircle.write("output_circle_sequentially.bmp");
 		auto end = chrono::high_resolution_clock::now();
 		auto elapsed = chrono::duration_cast<chrono::milliseconds>(end - begin).count();
@@ -223,7 +247,7 @@ void RunBitmapFilling(HANDLE hConsole)
 	}
 }
 
-void FillShapeParralelThread(BMP& bitmap, const Color& color) {
+void FillShapeParralelThread(BMP& bitmap, const Color& color, int delay) {
 	int* mask = new int[bitmap.width * bitmap.height]();
 	stack<Point> points;
 	Color backgroundColor = bitmap.getColor(0, 0);
@@ -246,9 +270,10 @@ void FillShapeParralelThread(BMP& bitmap, const Color& color) {
 	}
 
 	thread threads[500];
-	auto threadFunction = [](BMP& bitmap, int* mask, const Color& backgroundColor, const Color& color, int thread) 
+	auto threadFunction = [](BMP& bitmap, int* mask, const Color& backgroundColor, const Color& color, int delay, int thread) 
 	{
 		double slice = (bitmap.height * 1.0) / 500;
+		this_thread::sleep_for(std::chrono::milliseconds(delay));
 		for (int y = slice * thread; y < slice * (thread + 1); y++) {
 			for (int x = 0; x < bitmap.width; x++) {
 				if (bitmap.getColor(x, y).Equals(backgroundColor) && mask[bitmap.height * x + y] == 0) {
@@ -259,7 +284,7 @@ void FillShapeParralelThread(BMP& bitmap, const Color& color) {
 	};
 
 	for (int i = 0; i < 500; i++) {
-		threads[i] = thread(threadFunction, ref(bitmap), mask, ref(backgroundColor), ref(color), i);
+		threads[i] = thread(threadFunction, ref(bitmap), mask, ref(backgroundColor), ref(color), delay, i);
 	}
 	for (int i = 0; i < 500; i++) {
 		threads[i].join();
@@ -267,7 +292,7 @@ void FillShapeParralelThread(BMP& bitmap, const Color& color) {
 	delete[] mask;
 }
 
-void RunBitmapFillingParralelThread(HANDLE hConsole)
+void RunBitmapFillingParralelThread(HANDLE hConsole, int delay)
 {
 	cout << "\n\n";
 	SetConsoleTextAttribute(hConsole, 11);
@@ -280,7 +305,7 @@ void RunBitmapFillingParralelThread(HANDLE hConsole)
 	{
 		BMP bitmapSquare("square.bmp");
 		auto begin = chrono::high_resolution_clock::now();
-		FillShapeParralelThread(bitmapSquare, Color(255, 0, 0));
+		FillShapeParralelThread(bitmapSquare, Color(255, 0, 0), delay);
 		bitmapSquare.write("output_square_parralel_thread.bmp");
 		auto end = chrono::high_resolution_clock::now();
 		auto elapsed = chrono::duration_cast<chrono::milliseconds>(end - begin).count();
@@ -299,7 +324,7 @@ void RunBitmapFillingParralelThread(HANDLE hConsole)
 	{
 		BMP bitmapTriangle("triangle.bmp");
 		auto begin = chrono::high_resolution_clock::now();
-		FillShapeParralelThread(bitmapTriangle, Color(0, 255, 0));
+		FillShapeParralelThread(bitmapTriangle, Color(0, 255, 0), delay);
 		bitmapTriangle.write("output_triangle_parralel_thread.bmp");
 		auto end = chrono::high_resolution_clock::now();
 		auto elapsed = chrono::duration_cast<chrono::milliseconds>(end - begin).count();
@@ -318,7 +343,7 @@ void RunBitmapFillingParralelThread(HANDLE hConsole)
 	{
 		BMP bitmapCircle("circle.bmp");
 		auto begin = chrono::high_resolution_clock::now();
-		FillShapeParralelThread(bitmapCircle, Color(0, 0, 255));
+		FillShapeParralelThread(bitmapCircle, Color(0, 0, 255), delay);
 		bitmapCircle.write("output_circle_parralel_thread.bmp");
 		auto end = chrono::high_resolution_clock::now();
 		auto elapsed = chrono::duration_cast<chrono::milliseconds>(end - begin).count();
@@ -334,11 +359,12 @@ void RunBitmapFillingParralelThread(HANDLE hConsole)
 	}
 }
 
-void FillShapeParralelOpenMP(BMP& bitmap, const Color& color) {
+void FillShapeParralelOpenMP(BMP& bitmap, const Color& color, int delay) {
 	int* mask = new int[bitmap.width * bitmap.height]();
 	stack<Point> points;
 	Color backgroundColor = bitmap.getColor(0, 0);
 
+	this_thread::sleep_for(std::chrono::milliseconds(delay));
 	points.push(Point(0, 0));
 	while (!points.empty()) {
 		auto p = points.top();
@@ -367,7 +393,7 @@ void FillShapeParralelOpenMP(BMP& bitmap, const Color& color) {
 	delete[] mask;
 }
 
-void RunBitmapFillingParralelOpenMP(HANDLE hConsole)
+void RunBitmapFillingParralelOpenMP(HANDLE hConsole, int delay)
 {
 	cout << "\n\n";
 	SetConsoleTextAttribute(hConsole, 11);
@@ -380,7 +406,7 @@ void RunBitmapFillingParralelOpenMP(HANDLE hConsole)
 	{
 		BMP bitmapSquare("square.bmp");
 		auto begin = chrono::high_resolution_clock::now();
-		FillShapeParralelOpenMP(bitmapSquare, Color(255, 0, 0));
+		FillShapeParralelOpenMP(bitmapSquare, Color(255, 0, 0), delay);
 		bitmapSquare.write("output_square_parralel_openmp.bmp");
 		auto end = chrono::high_resolution_clock::now();
 		auto elapsed = chrono::duration_cast<chrono::milliseconds>(end - begin).count();
@@ -399,7 +425,7 @@ void RunBitmapFillingParralelOpenMP(HANDLE hConsole)
 	{
 		BMP bitmapTriangle("triangle.bmp");
 		auto begin = chrono::high_resolution_clock::now();
-		FillShapeParralelOpenMP(bitmapTriangle, Color(0, 255, 0));
+		FillShapeParralelOpenMP(bitmapTriangle, Color(0, 255, 0), delay);
 		bitmapTriangle.write("output_triangle_parralel_openmp.bmp");
 		auto end = chrono::high_resolution_clock::now();
 		auto elapsed = chrono::duration_cast<chrono::milliseconds>(end - begin).count();
@@ -418,7 +444,7 @@ void RunBitmapFillingParralelOpenMP(HANDLE hConsole)
 	{
 		BMP bitmapCircle("circle.bmp");
 		auto begin = chrono::high_resolution_clock::now();
-		FillShapeParralelOpenMP(bitmapCircle, Color(0, 0, 255));
+		FillShapeParralelOpenMP(bitmapCircle, Color(0, 0, 255), delay);
 		bitmapCircle.write("output_circle_parralel_openmp.bmp");
 		auto end = chrono::high_resolution_clock::now();
 		auto elapsed = chrono::duration_cast<chrono::milliseconds>(end - begin).count();
